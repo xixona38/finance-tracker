@@ -39,3 +39,12 @@ func (s *Service) Create(ctx context.Context, account Account) (*Account, error)
 
 	return s.repo.Create(ctx, account)
 }
+
+func (s *Service) List(ctx context.Context, userID int64) ([]Account, error) {
+	accounts, err := s.repo.List(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get list of accounts: %w", err)
+	}
+
+	return accounts, nil
+}

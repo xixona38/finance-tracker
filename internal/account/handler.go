@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/xixona38/finance-tracker/internal/platform/httpresponse"
 )
@@ -48,4 +49,19 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpresponse.WriteJSON(w, http.StatusCreated, createdAcc)
+}
+
+func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(r.PathValue("user_id"))
+	if err != nil {
+		httpresponse.WriteError(w, http.StatusBadRequest, "user id required")
+		return
+	}
+	accounts, err := h.svc.List(r.Context(), int64(id))
+	if err != nil {
+		httpresponse.WriteError(w, http.StatusBadGateway, "failed to get accounts")
+		return
+	}
+
+	httpresponse.WriteJSON(w, http.StatusOK, accounts)
 }
