@@ -19,4 +19,4 @@ migrate-up:
 	@migrate -path ./migrations -database "$(PG_URL)" -verbose up
 
 migrate-down:
-	@migrate -path ./migrations -database "$(PG_URL)" -verbose down
+	@migrate -path ./migrations -database "$(PG_URL)" -verbose down 1

@@ -3,6 +3,7 @@ package account
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strconv"
 
@@ -28,8 +29,27 @@ func NewHandler(svc *Service) *Handler {
 
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	accDTO := accountDTO{}
-	if err := json.NewDecoder(r.Body).Decode(&accDTO); err != nil {
+	var emptyVar any
+	reader := http.MaxBytesReader(w, r.Body, 16*1024)
+	decoder := json.NewDecoder(reader)
+
+	if err := decoder.Decode(&accDTO); err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			httpresponse.WriteError(w, http.StatusRequestEntityTooLarge, maxBytesErr.Error())
+			return
+		}
 		httpresponse.WriteError(w, http.StatusBadRequest, "failed to decode json")
+		return
+	}
+
+	if err := decoder.Decode(&emptyVar); err != io.EOF {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			httpresponse.WriteError(w, http.StatusRequestEntityTooLarge, maxBytesErr.Error())
+			return
+		}
+		httpresponse.WriteError(w, http.StatusBadRequest, "too much data")
 		return
 	}
 	acc := Account{
@@ -59,7 +79,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	}
 	accounts, err := h.svc.List(r.Context(), int64(id))
 	if err != nil {
-		httpresponse.WriteError(w, http.StatusBadGateway, "failed to get accounts")
+		httpresponse.WriteError(w, http.StatusInternalServerError, "failed to get accounts")
 		return
 	}
 

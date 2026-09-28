@@ -7,10 +7,17 @@ import (
 )
 
 func WriteJSON(w http.ResponseWriter, statusCode int, data any) {
+	body, err := json.Marshal(data)
+	if err != nil {
+		fmt.Print("тут нужно будет написать логгирование!")
+		http.Error(w, "failed to prepare response", http.StatusInternalServerError)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
-	if err := json.NewEncoder(w).Encode(data); err != nil {
-		fmt.Print("тут нужно будет написать логгирование!")
+	_, err = w.Write(body)
+	if err != nil {
+		fmt.Println("здесь нужно логгирование")
 	}
 }
 
