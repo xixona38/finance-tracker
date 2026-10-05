@@ -8,6 +8,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// NewPool parses the connection string, creates a PostgreSQL pool, and verifies it with Ping.
+// It closes the pool if Ping fails and otherwise returns the connected pool.
 func NewPool(ctx context.Context, pgURL string) (*pgxpool.Pool, error) {
 	config, err := pgxpool.ParseConfig(pgURL)
 	if err != nil {

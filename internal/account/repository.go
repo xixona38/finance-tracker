@@ -11,12 +11,15 @@ type Repository struct {
 	pool *pgxpool.Pool
 }
 
+// NewRepository creates an account repository using an existing PostgreSQL connection pool.
 func NewRepository(pool *pgxpool.Pool) *Repository {
 	return &Repository{
 		pool: pool,
 	}
 }
 
+// Create stores an account and its owner, populating ID and CreatedAt from the database.
+// It returns the saved account or a SQL error.
 func (r *Repository) Create(ctx context.Context, account Account) (*Account, error) {
 	query := `
 		INSERT INTO accounts (name, user_id, type, currency, initial_balance)
@@ -32,6 +35,8 @@ func (r *Repository) Create(ctx context.Context, account Account) (*Account, err
 	return &account, nil
 }
 
+// List retrieves the specified user's accounts in ascending ID order.
+// It returns an empty non-nil slice when no accounts exist.
 func (r *Repository) List(ctx context.Context, userID int64) ([]Account, error) {
 	query := `
 		SELECT id, user_id, name, type, currency, initial_balance, created_at FROM accounts

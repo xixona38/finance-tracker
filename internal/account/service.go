@@ -14,12 +14,15 @@ type Service struct {
 	repo *Repository
 }
 
+// NewService creates an account service with the supplied repository.
 func NewService(repo *Repository) *Service {
 	return &Service{
 		repo: repo,
 	}
 }
 
+// Create trims the account name, validates its length, type, and RUB currency,
+// and saves the account. Validation failures are wrapped with ErrValidation.
 func (s *Service) Create(ctx context.Context, account Account) (*Account, error) {
 	nameWithoutSpaces := strings.TrimSpace(account.Name)
 	nameLen := utf8.RuneCountInString(nameWithoutSpaces)
@@ -40,6 +43,8 @@ func (s *Service) Create(ctx context.Context, account Account) (*Account, error)
 	return s.repo.Create(ctx, account)
 }
 
+// List retrieves accounts for the specified user and wraps repository errors.
+// An empty account list is a successful result.
 func (s *Service) List(ctx context.Context, userID int64) ([]Account, error) {
 	accounts, err := s.repo.List(ctx, userID)
 	if err != nil {

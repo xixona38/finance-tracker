@@ -19,12 +19,15 @@ type Repository struct {
 	pool *pgxpool.Pool
 }
 
+// NewRepository creates a user repository using an existing PostgreSQL connection pool.
 func NewRepository(pool *pgxpool.Pool) *Repository {
 	return &Repository{
 		pool: pool,
 	}
 }
 
+// Create stores the email and password hash and returns the user with a database-generated
+// ID and creation timestamp. It returns ErrMailAlreadyExists for a duplicate email.
 func (r *Repository) Create(ctx context.Context, user User) (*User, error) {
 	query := `
 		INSERT INTO users (email, password_hash)
@@ -47,6 +50,8 @@ func (r *Repository) Create(ctx context.Context, user User) (*User, error) {
 	return &user, nil
 }
 
+// GetByEmail retrieves a user, including the password hash, by exact email match.
+// It returns ErrUserNotFound when no matching user exists.
 func (r *Repository) GetByEmail(ctx context.Context, email string) (*User, error) {
 	var foundUser User
 

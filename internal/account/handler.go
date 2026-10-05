@@ -21,12 +21,15 @@ type accountDTO struct {
 	InitialBalance int64  `json:"initial_balance"`
 }
 
+// NewHandler creates an HTTP account handler with the supplied service.
 func NewHandler(svc *Service) *Handler {
 	return &Handler{
 		svc: svc,
 	}
 }
 
+// Create reads a single JSON object limited to 16 KiB and passes account data to the service.
+// It returns the created account with status 201 or an appropriate error response.
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	accDTO := accountDTO{}
 	var emptyVar any
@@ -71,6 +74,8 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	httpresponse.WriteJSON(w, http.StatusCreated, createdAcc)
 }
 
+// List reads user_id from the route and returns the user's accounts as JSON with status 200.
+// It returns 400 for an invalid parameter and 500 for a service failure.
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(r.PathValue("user_id"))
 	if err != nil {

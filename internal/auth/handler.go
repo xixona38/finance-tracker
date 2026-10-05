@@ -14,6 +14,7 @@ type Handler struct {
 	svc *Service
 }
 
+// NewHandler creates an HTTP handler with the supplied authentication service.
 func NewHandler(svc *Service) *Handler {
 	return &Handler{
 		svc: svc,
@@ -30,6 +31,8 @@ type loginRequest struct {
 	Password string `json:"password"`
 }
 
+// Register accepts a single JSON object containing an email and password, limited to 16 KiB.
+// It returns the created user with status 201 or an appropriate error response.
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	req := registerRequest{}
 	var emptyVar any
@@ -77,6 +80,9 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 
 }
 
+// Login accepts an email and password in a single JSON object limited to 16 KiB.
+// On success, it sets a Secure, HttpOnly session cookie with SameSite=Lax and returns only the user as JSON with status 200.
+// It returns an appropriate error response if decoding, authentication, or session creation fails.
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	req := loginRequest{}
 	var emptyData any
@@ -105,7 +111,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	authUser, err := h.svc.Authenticate(r.Context(), req.Email, req.Password)
+	loginResult, err := h.svc.Login(r.Context(), req.Email, req.Password)
 	if err != nil {
 		if errors.Is(err, ErrValidation) {
 			httpresponse.WriteError(w, http.StatusBadRequest, err.Error())
@@ -121,5 +127,15 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	httpresponse.WriteJSON(w, http.StatusOK, authUser)
+	http.SetCookie(w, &http.Cookie{
+		Name:     "session",
+		Value:    loginResult.Token,
+		Path:     "/",
+		Expires:  loginResult.ExpiresAt,
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteLaxMode,
+	})
+
+	httpresponse.WriteJSON(w, http.StatusOK, loginResult.User)
 }
