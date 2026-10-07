@@ -15,15 +15,16 @@ type Middleware struct {
 	ses *session.Service
 }
 
-// NewMiddleware creates authentication middleware with the supplied session service.
+// NewMiddleware sets up session checks using the given session service.
 func NewMiddleware(session *session.Service) *Middleware {
 	return &Middleware{
 		ses: session,
 	}
 }
 
-// RequireAuth validates the session cookie and passes the session's user ID to next through the request context.
-// It returns 401 for a missing cookie, missing session, or expired session, and 500 for other validation errors.
+// RequireAuth checks the session cookie before allowing the request to reach the next handler.
+// It adds the user's ID to the request context, or returns 401 if the session is missing or expired.
+// Other errors while checking the session return 500.
 func (m *Middleware) RequireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		cookie, err := r.Cookie("session")

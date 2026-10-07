@@ -14,7 +14,7 @@ type Handler struct {
 	svc *Service
 }
 
-// NewHandler creates an HTTP handler with the supplied authentication service.
+// NewHandler sets up the registration, login, and logout handlers using the given service.
 func NewHandler(svc *Service) *Handler {
 	return &Handler{
 		svc: svc,
@@ -31,8 +31,8 @@ type loginRequest struct {
 	Password string `json:"password"`
 }
 
-// Register accepts a single JSON object containing an email and password, limited to 16 KiB.
-// It returns the created user with status 201 or an appropriate error response.
+// Register reads an email and password from JSON and creates a user.
+// It returns the user's public data with status 201, without the password hash.
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	req := registerRequest{}
 	var emptyVar any
@@ -80,9 +80,8 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 
 }
 
-// Login accepts an email and password in a single JSON object limited to 16 KiB.
-// On success, it sets a Secure, HttpOnly session cookie with SameSite=Lax and returns only the user as JSON with status 200.
-// It returns an appropriate error response if decoding, authentication, or session creation fails.
+// Login checks the submitted email and password and starts a new session.
+// It puts the session token in a cookie and returns the user's public data as JSON.
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	req := loginRequest{}
 	var emptyData any
@@ -138,4 +137,40 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	})
 
 	httpresponse.WriteJSON(w, http.StatusOK, loginResult.User)
+}
+
+// Logout ends the session and tells the client to remove its session cookie.
+// It returns status 204 with no body, including when the client has no session cookie.
+func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
+	token, err := r.Cookie("session")
+	if err != nil {
+		http.SetCookie(w, &http.Cookie{
+			Name:     "session",
+			Value:    "",
+			Path:     "/",
+			MaxAge:   -1,
+			HttpOnly: true,
+			Secure:   true,
+			SameSite: http.SameSiteLaxMode,
+		})
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	if err := h.svc.Logout(r.Context(), token.Value); err != nil {
+		httpresponse.WriteError(w, http.StatusInternalServerError, "failed to logout")
+		return
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     "session",
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteLaxMode,
+	})
+
+	w.WriteHeader(http.StatusNoContent)
 }

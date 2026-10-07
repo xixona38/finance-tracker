@@ -6,8 +6,8 @@ import (
 	"net/http"
 )
 
-// WriteJSON marshals data before sending the requested status and JSON body.
-// It sends a plain-text 500 response if marshaling fails.
+// WriteJSON converts data to JSON and sends it with the requested HTTP status.
+// If the data cannot be converted, it sends a plain-text 500 error instead.
 func WriteJSON(w http.ResponseWriter, statusCode int, data any) {
 	body, err := json.Marshal(data)
 	if err != nil {
@@ -23,7 +23,7 @@ func WriteJSON(w http.ResponseWriter, statusCode int, data any) {
 	}
 }
 
-// WriteError sends the requested status and a JSON object containing the error message.
+// WriteError sends the error message as JSON with the requested HTTP status.
 func WriteError(w http.ResponseWriter, statusCode int, msg string) {
 	WriteJSON(w, statusCode, map[string]string{"error": msg})
 }

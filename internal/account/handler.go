@@ -5,8 +5,8 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"strconv"
 
+	"github.com/xixona38/finance-tracker/internal/auth"
 	"github.com/xixona38/finance-tracker/internal/platform/httpresponse"
 )
 
@@ -21,16 +21,22 @@ type accountDTO struct {
 	InitialBalance int64  `json:"initial_balance"`
 }
 
-// NewHandler creates an HTTP account handler with the supplied service.
+// NewHandler sets up the account handlers using the given account service.
 func NewHandler(svc *Service) *Handler {
 	return &Handler{
 		svc: svc,
 	}
 }
 
-// Create reads a single JSON object limited to 16 KiB and passes account data to the service.
-// It returns the created account with status 201 or an appropriate error response.
+// Create reads account details from JSON and creates an account for the logged-in user.
+// It returns the new account with status 201, or an error if the request cannot be completed.
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
+	userID, ok := auth.UserIDFromContext(r.Context())
+	if !ok {
+		httpresponse.WriteError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
+
 	accDTO := accountDTO{}
 	var emptyVar any
 	reader := http.MaxBytesReader(w, r.Body, 16*1024)
@@ -56,6 +62,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	acc := Account{
+		UserID:         userID,
 		Name:           accDTO.Name,
 		Type:           accDTO.Type,
 		Currency:       accDTO.Currency,
@@ -74,15 +81,15 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	httpresponse.WriteJSON(w, http.StatusCreated, createdAcc)
 }
 
-// List reads user_id from the route and returns the user's accounts as JSON with status 200.
-// It returns 400 for an invalid parameter and 500 for a service failure.
+// List returns the logged-in user's accounts as JSON.
+// It reads the user ID from the request context, not from the URL.
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.Atoi(r.PathValue("user_id"))
-	if err != nil {
-		httpresponse.WriteError(w, http.StatusBadRequest, "user id required")
+	userID, ok := auth.UserIDFromContext(r.Context())
+	if !ok {
+		httpresponse.WriteError(w, http.StatusUnauthorized, "authentication required")
 		return
 	}
-	accounts, err := h.svc.List(r.Context(), int64(id))
+	accounts, err := h.svc.List(r.Context(), userID)
 	if err != nil {
 		httpresponse.WriteError(w, http.StatusInternalServerError, "failed to get accounts")
 		return

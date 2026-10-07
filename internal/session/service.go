@@ -20,8 +20,8 @@ type Service struct {
 	ttl  time.Duration
 }
 
-// NewService creates a session service with the supplied lifetime.
-// It accepts lifetimes between five minutes and one hour, inclusive.
+// NewService sets up session management with the given session lifetime.
+// The lifetime must be at least five minutes and no more than one hour.
 func NewService(repo *SessionRepository, ttl time.Duration) (*Service, error) {
 	if ttl < time.Minute*5 {
 		return nil, ErrInvalidTTL
@@ -36,8 +36,8 @@ func NewService(repo *SessionRepository, ttl time.Duration) (*Service, error) {
 	}, nil
 }
 
-// Create generates a random token and stores a session for the specified user.
-// It stores the token's SHA-256 hash and returns the original token and saved session.
+// Create starts a session for the user and generates a random token for the client.
+// Only the token's hash is saved in the database; the original token is returned with the session.
 func (s *Service) Create(ctx context.Context, userID int64) (string, *Session, error) {
 	tokenInBytes := make([]byte, 32)
 	rand.Read(tokenInBytes)
@@ -61,8 +61,8 @@ func (s *Service) Create(ctx context.Context, userID int64) (string, *Session, e
 	return token, &session, nil
 }
 
-// Validate hashes the token, retrieves its session, and checks the expiration time.
-// It returns the session or a missing session, expiration, or database error.
+// Validate finds the session for a token and checks that it has not expired.
+// It returns an error if the session is missing, has expired, or cannot be read from the database.
 func (s *Service) Validate(ctx context.Context, token string) (*Session, error) {
 	tokenHashBytes := sha256.Sum256([]byte(token))
 	tokenHash := hex.EncodeToString(tokenHashBytes[:])
@@ -72,15 +72,15 @@ func (s *Service) Validate(ctx context.Context, token string) (*Session, error) 
 		return nil, err
 	}
 
-	if !session.ExpiresAt.Before(time.Now()) {
+	if time.Now().Before(session.ExpiresAt) {
 		return session, nil
 	}
 
 	return nil, ErrSessionExpired
 }
 
-// Revoke hashes the token and deletes the corresponding session.
-// Revoking a session that is already absent succeeds.
+// Revoke deletes the session for a token so the token can no longer be used.
+// It also succeeds if the session has already been deleted.
 func (s *Service) Revoke(ctx context.Context, token string) error {
 	tokenHashBytes := sha256.Sum256([]byte(token))
 	tokenHash := hex.EncodeToString(tokenHashBytes[:])

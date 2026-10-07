@@ -2,8 +2,8 @@ package auth
 
 import "context"
 
-// UserIDFromContext retrieves the authenticated user's ID from the context.
-// It returns zero and false if the value is absent or is not an int64.
+// UserIDFromContext reads the user ID placed in the context by the authentication middleware.
+// The second result is false if there is no int64 user ID under the expected key.
 func UserIDFromContext(ctx context.Context) (int64, bool) {
 	res := ctx.Value(userIDContextKey{})
 

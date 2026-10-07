@@ -23,7 +23,7 @@ type Service struct {
 	session *session.Service
 }
 
-// NewService creates an authentication service with a user repository and session service.
+// NewService sets up authentication using user storage and session management.
 func NewService(repo *user.Repository, session *session.Service) *Service {
 	return &Service{
 		repo:    repo,
@@ -31,8 +31,8 @@ func NewService(repo *user.Repository, session *session.Service) *Service {
 	}
 }
 
-// Register validates the email and password, hashes the password, and stores a new user.
-// It returns the created user or a validation, duplicate email, or internal error.
+// Register checks the email and password, hashes the password, and saves a new user.
+// It returns an error if the details are invalid, the email is taken, or saving fails.
 func (s *Service) Register(ctx context.Context, email, password string) (*user.User, error) {
 	addr, err := mail.ParseAddress(strings.TrimSpace(email))
 	if err != nil {
@@ -64,8 +64,8 @@ func (s *Service) Register(ctx context.Context, email, password string) (*user.U
 	return createdUser, nil
 }
 
-// Authenticate validates credentials and verifies the password against the stored hash.
-// It returns the matching user or ErrInvalidCredentials for an unknown email or incorrect password.
+// Authenticate finds the user by email and checks the password against their saved hash.
+// It returns ErrInvalidCredentials if no user is found or the password does not match.
 func (s *Service) Authenticate(ctx context.Context, email, password string) (*user.User, error) {
 	addr, err := mail.ParseAddress(strings.TrimSpace(email))
 	if err != nil {
@@ -100,8 +100,8 @@ func (s *Service) Authenticate(ctx context.Context, email, password string) (*us
 	return nil, ErrInvalidCredentials
 }
 
-// Login authenticates the user and creates a session.
-// It returns the user, the session token, and the session expiration time.
+// Login checks the user's credentials and creates a session for them.
+// It returns the user, the token to send to the client, and the session's expiration time.
 func (s *Service) Login(ctx context.Context, email, password string) (*LoginResult, error) {
 	user, err := s.Authenticate(ctx, email, password)
 	if err != nil {
@@ -118,4 +118,13 @@ func (s *Service) Login(ctx context.Context, email, password string) (*LoginResu
 		Token:     token,
 		ExpiresAt: session.ExpiresAt,
 	}, nil
+}
+
+// Logout deletes the session associated with the token so it can no longer be used.
+// It also succeeds if the session has already been deleted.
+func (s *Service) Logout(ctx context.Context, token string) error {
+	if err := s.session.Revoke(ctx, token); err != nil {
+		return fmt.Errorf("failed to logout: %w", err)
+	}
+	return nil
 }

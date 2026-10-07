@@ -17,14 +17,14 @@ type SessionRepository struct {
 	pool *pgxpool.Pool
 }
 
-// NewSessionRepo creates a session repository using an existing PostgreSQL connection pool.
+// NewSessionRepo sets up session storage using the given database pool.
 func NewSessionRepo(pool *pgxpool.Pool) *SessionRepository {
 	return &SessionRepository{
 		pool: pool,
 	}
 }
 
-// Create stores the supplied session's token hash, user ID, and timestamps.
+// Create saves the session's token hash, owner, creation time, and expiration time in the database.
 func (s *SessionRepository) Create(ctx context.Context, session *Session) error {
 	query := `
 		INSERT INTO sessions (token_hash, user_id, created_at, expires_at)
@@ -43,8 +43,8 @@ func (s *SessionRepository) Create(ctx context.Context, session *Session) error 
 	return nil
 }
 
-// FindByHash retrieves a session by its stored token hash.
-// It returns ErrSessionNotFound when no matching record exists.
+// FindByHash looks up a session using the token's hash.
+// It returns ErrSessionNotFound if the database has no matching session.
 func (s *SessionRepository) FindByHash(ctx context.Context, hash string) (*Session, error) {
 	query := `
 		SELECT token_hash, user_id, created_at, expires_at FROM sessions
@@ -65,8 +65,8 @@ func (s *SessionRepository) FindByHash(ctx context.Context, hash string) (*Sessi
 
 }
 
-// Delete removes a session by its token hash and wraps SQL execution errors.
-// It returns nil if the record is already absent.
+// Delete removes the session with the given token hash from the database.
+// A session that is already missing does not cause an error.
 func (s *SessionRepository) Delete(ctx context.Context, hash string) error {
 	query := `
 		DELETE FROM sessions
