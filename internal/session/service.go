@@ -11,28 +11,31 @@ import (
 )
 
 var (
-	ErrInvalidTTL     = errors.New("invalid session time to live")
-	ErrSessionExpired = errors.New("session expired")
+	ErrInvalidIdleTTL     = errors.New("invalid session's idle time to live")
+	ErrInvalidAbsoluteTTL = errors.New("invalid session's absolute time to live")
+	ErrSessionExpired     = errors.New("session expired")
 )
 
 type Service struct {
-	repo *SessionRepository
-	ttl  time.Duration
+	repo        *SessionRepository
+	idleTTL     time.Duration
+	absoluteTTL time.Duration
 }
 
 // NewService sets up session management with the given session lifetime.
 // The lifetime must be at least five minutes and no more than one hour.
-func NewService(repo *SessionRepository, ttl time.Duration) (*Service, error) {
-	if ttl < time.Minute*5 {
-		return nil, ErrInvalidTTL
+func NewService(repo *SessionRepository, idleTTL, absoluteTTL time.Duration) (*Service, error) {
+	if idleTTL < time.Minute*5 || idleTTL > time.Hour {
+		return nil, ErrInvalidIdleTTL
+	}
+	if absoluteTTL < time.Hour*5 || absoluteTTL > time.Hour*24 {
+		return nil, ErrInvalidAbsoluteTTL
 	}
 
-	if ttl > time.Hour {
-		return nil, ErrInvalidTTL
-	}
 	return &Service{
-		repo: repo,
-		ttl:  ttl,
+		repo:        repo,
+		idleTTL:     idleTTL,
+		absoluteTTL: absoluteTTL,
 	}, nil
 }
 
@@ -45,7 +48,7 @@ func (s *Service) Create(ctx context.Context, userID int64) (string, *Session, e
 	tokenHash := sha256.Sum256([]byte(token))
 
 	createdAt := time.Now()
-	expiresAt := createdAt.Add(s.ttl)
+	expiresAt := createdAt.Add(s.idleTTL)
 
 	session := Session{
 		UserID:    userID,
@@ -72,7 +75,9 @@ func (s *Service) Validate(ctx context.Context, token string) (*Session, error) 
 		return nil, err
 	}
 
-	if time.Now().Before(session.ExpiresAt) {
+	absExpiresAt := session.CreatedAt.Add(s.absoluteTTL)
+	current := time.Now()
+	if current.Before(session.ExpiresAt) && current.Before(absExpiresAt) {
 		return session, nil
 	}
 
@@ -89,4 +94,20 @@ func (s *Service) Revoke(ctx context.Context, token string) error {
 		return fmt.Errorf("failed to revoke session: %w", err)
 	}
 	return nil
+}
+
+func (s *Service) Renew(ctx context.Context, token string) (*Session, error) {
+	session, err := s.Validate(ctx, token)
+	if err != nil {
+		return nil, err
+	}
+
+	absoluteExpiresAt := session.CreatedAt.Add(s.absoluteTTL)
+	wantedExpiresAt := time.Now().Add(s.idleTTL)
+
+	if wantedExpiresAt.Before(absoluteExpiresAt) {
+		return s.repo.Extend(ctx, session.TokenHash, wantedExpiresAt)
+	}
+
+	return s.repo.Extend(ctx, session.TokenHash, absoluteExpiresAt)
 }

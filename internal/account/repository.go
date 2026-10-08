@@ -2,8 +2,10 @@ package account
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -27,7 +29,15 @@ func (r *Repository) Create(ctx context.Context, account Account) (*Account, err
 		RETURNING id, created_at;
 	`
 
-	err := r.pool.QueryRow(ctx, query, account.Name, account.UserID, account.Type, account.Currency, account.InitialBalance).Scan(&account.ID, &account.CreatedAt)
+	err := r.pool.QueryRow(
+		ctx,
+		query,
+		account.Name,
+		account.UserID,
+		account.Type,
+		account.Currency,
+		account.InitialBalance,
+	).Scan(&account.ID, &account.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute sql query: %w", err)
 	}
@@ -74,4 +84,31 @@ func (r *Repository) List(ctx context.Context, userID int64) ([]Account, error) 
 	}
 
 	return accounts, nil
+}
+
+func (r *Repository) GetAnAccount(ctx context.Context, userID, accID int64) (*Account, error) {
+	query := `
+		SELECT id, user_id, name, type, currency, initial_balance, created_at
+		FROM accounts
+		WHERE user_id=$1 AND id=$2;
+	`
+
+	var acc Account
+	err := r.pool.QueryRow(ctx, query, userID, accID).Scan(
+		&acc.ID,
+		&acc.UserID,
+		&acc.Name,
+		&acc.Type,
+		&acc.Currency,
+		&acc.InitialBalance,
+		&acc.CreatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrAccountNotFound
+		}
+		return nil, fmt.Errorf("failed to execute sql query: %w", err)
+	}
+
+	return &acc, nil
 }

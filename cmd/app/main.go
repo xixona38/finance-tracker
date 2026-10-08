@@ -12,6 +12,7 @@ import (
 	"github.com/xixona38/finance-tracker/internal/platform/database"
 	"github.com/xixona38/finance-tracker/internal/server"
 	"github.com/xixona38/finance-tracker/internal/session"
+	"github.com/xixona38/finance-tracker/internal/transaction"
 	"github.com/xixona38/finance-tracker/internal/user"
 )
 
@@ -38,7 +39,7 @@ func main() {
 	accHand := account.NewHandler(accSvc)
 
 	sessionRepo := session.NewSessionRepo(pool)
-	sessionSvc, err := session.NewService(sessionRepo, time.Minute*15)
+	sessionSvc, err := session.NewService(sessionRepo, time.Minute*15, time.Hour*10)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -50,7 +51,11 @@ func main() {
 	authHand := auth.NewHandler(authSvc)
 	mw := auth.NewMiddleware(sessionSvc)
 
-	mux := server.NewRouter(accHand, authHand, mw)
+	trRepo := transaction.NewRepository(pool)
+	trSvc := transaction.NewService(trRepo, accRepo)
+	trHand := transaction.NewHandler(trSvc)
+
+	mux := server.NewRouter(accHand, authHand, trHand, mw)
 
 	server := http.Server{
 		Addr:              "127.0.0.1:8080",

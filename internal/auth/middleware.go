@@ -33,7 +33,7 @@ func (m *Middleware) RequireAuth(next http.Handler) http.Handler {
 			return
 		}
 
-		sessionFound, err := m.ses.Validate(r.Context(), cookie.Value)
+		sessionFound, err := m.ses.Renew(r.Context(), cookie.Value)
 		if err != nil {
 			if errors.Is(err, session.ErrSessionExpired) || errors.Is(err, session.ErrSessionNotFound) {
 				httpresponse.WriteError(w, http.StatusUnauthorized, "session expired or not found")
@@ -45,6 +45,16 @@ func (m *Middleware) RequireAuth(next http.Handler) http.Handler {
 		}
 
 		ctx := context.WithValue(r.Context(), userIDContextKey{}, sessionFound.UserID)
+
+		http.SetCookie(w, &http.Cookie{
+			Name:     "session",
+			Value:    cookie.Value,
+			Path:     "/",
+			Expires:  sessionFound.ExpiresAt,
+			HttpOnly: true,
+			Secure:   true,
+			SameSite: http.SameSiteLaxMode,
+		})
 
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})

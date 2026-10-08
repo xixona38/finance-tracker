@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -78,4 +79,23 @@ func (s *SessionRepository) Delete(ctx context.Context, hash string) error {
 	}
 
 	return nil
+}
+
+func (s *SessionRepository) Extend(ctx context.Context, tokenHash string, expiresAt time.Time) (*Session, error) {
+	query := `
+		UPDATE sessions
+		SET expires_at = GREATEST(expires_at, $1)
+		WHERE token_hash=$2 AND expires_at > NOW()
+		RETURNING token_hash, user_id, created_at, expires_at;
+	`
+
+	var session Session
+	if err := s.pool.QueryRow(ctx, query, expiresAt, tokenHash).Scan(&session.TokenHash, &session.UserID, &session.CreatedAt, &session.ExpiresAt); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrSessionNotFound
+		}
+		return nil, fmt.Errorf("failed to execute sql query: %w", err)
+	}
+
+	return &session, nil
 }

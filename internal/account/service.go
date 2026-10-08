@@ -8,7 +8,10 @@ import (
 	"unicode/utf8"
 )
 
-var ErrValidation = errors.New("validation failed")
+var (
+	ErrAccountNotFound = errors.New("account not found")
+	ErrValidation      = errors.New("validation failed")
+)
 
 type Service struct {
 	repo *Repository
