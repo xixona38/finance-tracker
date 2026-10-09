@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/xixona38/finance-tracker/internal/account"
@@ -25,12 +26,15 @@ type transactionDTO struct {
 	OccurredAt  time.Time `json:"occurred_at"`
 }
 
+// NewHandler sets up the transaction handlers using the given transaction service.
 func NewHandler(svc *Service) *Handler {
 	return &Handler{
 		svc: svc,
 	}
 }
 
+// Create reads transaction details from JSON and records the operation for the logged-in user.
+// It returns the saved transaction with status 201, or an error if the request cannot be completed.
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	userID, ok := auth.UserIDFromContext(r.Context())
 	if !ok {
@@ -88,4 +92,63 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httpresponse.WriteJSON(w, http.StatusCreated, res)
+}
+
+// List returns the logged-in user's transaction history as JSON.
+// It reads limit, offset, and the optional account_id filter from the URL.
+// By default, it returns up to 20 transactions starting from the first result.
+func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
+	userID, ok := auth.UserIDFromContext(r.Context())
+	if !ok {
+		httpresponse.WriteError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
+	var accID *int64
+
+	lim := r.URL.Query().Get("limit")
+	off := r.URL.Query().Get("offset")
+	acc := r.URL.Query().Get("account_id")
+
+	limit := 20
+	offset := 0
+	accID = nil
+
+	if lim != "" {
+		val, err := strconv.Atoi(lim)
+		if err != nil {
+			httpresponse.WriteError(w, http.StatusBadRequest, "limit must be an integer")
+			return
+		}
+		limit = val
+	}
+
+	if off != "" {
+		val, err := strconv.Atoi(off)
+		if err != nil {
+			httpresponse.WriteError(w, http.StatusBadRequest, "offset must be an integer")
+			return
+		}
+		offset = val
+	}
+
+	if acc != "" {
+		val, err := strconv.ParseInt(acc, 10, 64)
+		if err != nil {
+			httpresponse.WriteError(w, http.StatusBadRequest, "account must be an integer")
+			return
+		}
+		accID = &val
+	}
+
+	trs, err := h.svc.List(r.Context(), userID, accID, limit, offset)
+	if err != nil {
+		if errors.Is(err, ErrInvalidData) {
+			httpresponse.WriteError(w, http.StatusBadRequest, "invalid data")
+			return
+		}
+		httpresponse.WriteError(w, http.StatusInternalServerError, "an error occurred")
+		return
+	}
+
+	httpresponse.WriteJSON(w, http.StatusOK, trs)
 }

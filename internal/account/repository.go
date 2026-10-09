@@ -80,12 +80,14 @@ func (r *Repository) List(ctx context.Context, userID int64) ([]Account, error) 
 	}
 
 	if err = rows.Err(); err != nil {
-		return nil, fmt.Errorf("an error occured while reading rows: %w", err)
+		return nil, fmt.Errorf("an error occurred while reading rows: %w", err)
 	}
 
 	return accounts, nil
 }
 
+// GetAnAccount finds an account by its ID and owner.
+// It returns ErrAccountNotFound if the account is missing or belongs to another user.
 func (r *Repository) GetAnAccount(ctx context.Context, userID, accID int64) (*Account, error) {
 	query := `
 		SELECT id, user_id, name, type, currency, initial_balance, created_at

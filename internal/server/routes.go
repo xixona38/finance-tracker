@@ -8,8 +8,8 @@ import (
 	"github.com/xixona38/finance-tracker/internal/transaction"
 )
 
-// NewRouter sets up the registration, login, logout, and account routes with CSRF protection.
-// Account routes also require a valid session.
+// NewRouter sets up the authentication, account, and transaction routes with CSRF protection.
+// Account and transaction routes require a valid session.
 func NewRouter(
 	acc *account.Handler,
 	authHandler *auth.Handler,
@@ -26,6 +26,7 @@ func NewRouter(
 	mux.Handle("POST /api/v1/accounts", mw.RequireAuth(http.HandlerFunc(acc.Create)))
 	mux.Handle("GET /api/v1/accounts", mw.RequireAuth(http.HandlerFunc(acc.List)))
 	mux.Handle("POST /api/v1/transactions", mw.RequireAuth(http.HandlerFunc(trHandler.Create)))
+	mux.Handle("GET /api/v1/transactions", mw.RequireAuth(http.HandlerFunc(trHandler.List)))
 
 	return secureMux
 }

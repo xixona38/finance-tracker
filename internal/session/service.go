@@ -22,8 +22,9 @@ type Service struct {
 	absoluteTTL time.Duration
 }
 
-// NewService sets up session management with the given session lifetime.
-// The lifetime must be at least five minutes and no more than one hour.
+// NewService sets how long a session may stay idle and how long it may exist in total.
+// The idle timeout must be between five minutes and one hour.
+// The total lifetime must be between five and 24 hours.
 func NewService(repo *SessionRepository, idleTTL, absoluteTTL time.Duration) (*Service, error) {
 	if idleTTL < time.Minute*5 || idleTTL > time.Hour {
 		return nil, ErrInvalidIdleTTL
@@ -64,7 +65,7 @@ func (s *Service) Create(ctx context.Context, userID int64) (string, *Session, e
 	return token, &session, nil
 }
 
-// Validate finds the session for a token and checks that it has not expired.
+// Validate finds the session for a token and checks both its idle timeout and total lifetime.
 // It returns an error if the session is missing, has expired, or cannot be read from the database.
 func (s *Service) Validate(ctx context.Context, token string) (*Session, error) {
 	tokenHashBytes := sha256.Sum256([]byte(token))
@@ -96,6 +97,8 @@ func (s *Service) Revoke(ctx context.Context, token string) error {
 	return nil
 }
 
+// Renew checks the session and requests a later expiration time after user activity.
+// It limits the requested expiration time to the session's maximum total lifetime and keeps the same token.
 func (s *Service) Renew(ctx context.Context, token string) (*Session, error) {
 	session, err := s.Validate(ctx, token)
 	if err != nil {

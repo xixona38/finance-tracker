@@ -22,9 +22,9 @@ func NewMiddleware(session *session.Service) *Middleware {
 	}
 }
 
-// RequireAuth checks the session cookie before allowing the request to reach the next handler.
-// It adds the user's ID to the request context, or returns 401 if the session is missing or expired.
-// Other errors while checking the session return 500.
+// RequireAuth checks and renews the session before passing the request to the next handler.
+// It refreshes the cookie's expiration time and adds the user's ID to the request context.
+// A missing or expired session returns 401; other session errors return 500.
 func (m *Middleware) RequireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		cookie, err := r.Cookie("session")

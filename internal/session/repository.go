@@ -81,6 +81,9 @@ func (s *SessionRepository) Delete(ctx context.Context, hash string) error {
 	return nil
 }
 
+// Extend moves an active session's expiration time forward and returns the updated session.
+// It keeps the later expiration time if another request has already extended the session.
+// It returns ErrSessionNotFound if the session is missing or has already expired.
 func (s *SessionRepository) Extend(ctx context.Context, tokenHash string, expiresAt time.Time) (*Session, error) {
 	query := `
 		UPDATE sessions
