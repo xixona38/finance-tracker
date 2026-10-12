@@ -22,6 +22,7 @@ func NewRepository(pool *pgxpool.Pool) *Repository {
 
 // Create saves a new account and its owner in the database.
 // It returns the account with the ID and creation time assigned by the database.
+// The returned balance equals the initial balance because the account has no transactions yet.
 func (r *Repository) Create(ctx context.Context, account Account) (*Account, error) {
 	query := `
 		INSERT INTO accounts (name, user_id, type, currency, initial_balance)
@@ -42,16 +43,42 @@ func (r *Repository) Create(ctx context.Context, account Account) (*Account, err
 		return nil, fmt.Errorf("failed to execute sql query: %w", err)
 	}
 
+	account.Balance = account.InitialBalance
+
 	return &account, nil
 }
 
 // List returns one user's accounts, ordered from lowest to highest ID.
+// Each balance is the initial amount plus all incoming transactions minus all outgoing ones.
 // It returns an empty slice if the user has no accounts.
 func (r *Repository) List(ctx context.Context, userID int64) ([]Account, error) {
 	query := `
-		SELECT id, user_id, name, type, currency, initial_balance, created_at FROM accounts
-		WHERE user_id=$1
-		ORDER BY id
+		SELECT
+			a.id,
+			a.user_id,
+			a.name,
+			a.type,
+			a.currency,
+			a.initial_balance,
+			a.created_at,
+			(
+				a.initial_balance
+				+ COALESCE((
+					SELECT SUM(t.amount)
+					FROM transactions AS t
+					WHERE t.to_acc_id = a.id
+					AND a.user_id = t.user_id
+				), 0)
+				- COALESCE((
+					SELECT SUM(t.amount)
+					FROM transactions AS t
+					WHERE t.from_acc_id = a.id
+					AND a.user_id = t.user_id
+				), 0)
+			) AS balance
+		FROM accounts AS a
+		WHERE a.user_id=$1
+		ORDER BY a.id;
 	`
 
 	accounts := make([]Account, 0, 4)
@@ -72,6 +99,7 @@ func (r *Repository) List(ctx context.Context, userID int64) ([]Account, error) 
 			&res.Currency,
 			&res.InitialBalance,
 			&res.CreatedAt,
+			&res.Balance,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read a row: %w", err)
@@ -87,6 +115,7 @@ func (r *Repository) List(ctx context.Context, userID int64) ([]Account, error) 
 }
 
 // GetAnAccount finds an account by its ID and owner.
+// It loads the saved account details without calculating the current balance.
 // It returns ErrAccountNotFound if the account is missing or belongs to another user.
 func (r *Repository) GetAnAccount(ctx context.Context, userID, accID int64) (*Account, error) {
 	query := `

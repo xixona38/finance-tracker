@@ -6,8 +6,8 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/xixona38/finance-tracker/internal/auth"
 	"github.com/xixona38/finance-tracker/internal/platform/httpresponse"
+	"github.com/xixona38/finance-tracker/internal/platform/requestcontext"
 )
 
 type Handler struct {
@@ -31,7 +31,7 @@ func NewHandler(svc *Service) *Handler {
 // Create reads account details from JSON and creates an account for the logged-in user.
 // It returns the new account with status 201, or an error if the request cannot be completed.
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
-	userID, ok := auth.UserIDFromContext(r.Context())
+	userID, ok := requestcontext.UserIDFromContext(r.Context())
 	if !ok {
 		httpresponse.WriteError(w, http.StatusUnauthorized, "authentication required")
 		return
@@ -81,10 +81,10 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	httpresponse.WriteJSON(w, http.StatusCreated, createdAcc)
 }
 
-// List returns the logged-in user's accounts as JSON.
+// List returns the logged-in user's accounts and current balances as JSON.
 // It reads the user ID from the request context, not from the URL.
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
-	userID, ok := auth.UserIDFromContext(r.Context())
+	userID, ok := requestcontext.UserIDFromContext(r.Context())
 	if !ok {
 		httpresponse.WriteError(w, http.StatusUnauthorized, "authentication required")
 		return

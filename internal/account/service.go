@@ -46,7 +46,7 @@ func (s *Service) Create(ctx context.Context, account Account) (*Account, error)
 	return s.repo.Create(ctx, account)
 }
 
-// List returns all accounts belonging to the given user.
+// List returns all accounts belonging to the given user, including their current balances.
 // A user with no accounts gets an empty list, not an error.
 func (s *Service) List(ctx context.Context, userID int64) ([]Account, error) {
 	accounts, err := s.repo.List(ctx, userID)

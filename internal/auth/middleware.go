@@ -1,15 +1,14 @@
 package auth
 
 import (
-	"context"
 	"errors"
 	"net/http"
 
 	"github.com/xixona38/finance-tracker/internal/platform/httpresponse"
+	"github.com/xixona38/finance-tracker/internal/platform/requestcontext"
+
 	"github.com/xixona38/finance-tracker/internal/session"
 )
-
-type userIDContextKey struct{}
 
 type Middleware struct {
 	ses *session.Service
@@ -44,7 +43,7 @@ func (m *Middleware) RequireAuth(next http.Handler) http.Handler {
 			return
 		}
 
-		ctx := context.WithValue(r.Context(), userIDContextKey{}, sessionFound.UserID)
+		ctx := requestcontext.WithUserID(r.Context(), sessionFound.UserID)
 
 		http.SetCookie(w, &http.Cookie{
 			Name:     "session",

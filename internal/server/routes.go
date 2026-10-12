@@ -6,14 +6,16 @@ import (
 	"github.com/xixona38/finance-tracker/internal/account"
 	"github.com/xixona38/finance-tracker/internal/auth"
 	"github.com/xixona38/finance-tracker/internal/transaction"
+	"github.com/xixona38/finance-tracker/internal/user"
 )
 
-// NewRouter sets up the authentication, account, and transaction routes with CSRF protection.
-// Account and transaction routes require a valid session.
+// NewRouter connects the HTTP routes to their handlers and adds CSRF protection.
+// Account routes, transaction routes, and /me require a valid session.
 func NewRouter(
 	acc *account.Handler,
 	authHandler *auth.Handler,
 	trHandler *transaction.Handler,
+	userHandler *user.Handler,
 	mw *auth.Middleware,
 ) http.Handler {
 	protection := http.NewCrossOriginProtection()
@@ -27,6 +29,7 @@ func NewRouter(
 	mux.Handle("GET /api/v1/accounts", mw.RequireAuth(http.HandlerFunc(acc.List)))
 	mux.Handle("POST /api/v1/transactions", mw.RequireAuth(http.HandlerFunc(trHandler.Create)))
 	mux.Handle("GET /api/v1/transactions", mw.RequireAuth(http.HandlerFunc(trHandler.List)))
-
+	mux.Handle("DELETE /api/v1/transactions/{id}", mw.RequireAuth(http.HandlerFunc(trHandler.Delete)))
+	mux.Handle("GET /api/v1/me", mw.RequireAuth(http.HandlerFunc(userHandler.Me)))
 	return secureMux
 }

@@ -8,6 +8,7 @@ type Account struct {
 	Name           string    `json:"name"`
 	Type           string    `json:"type"`
 	Currency       string    `json:"currency"`
+	Balance        int64     `json:"balance"`
 	InitialBalance int64     `json:"initial_balance"`
 	CreatedAt      time.Time `json:"created_at"`
 }

@@ -1,6 +1,9 @@
 package user
 
-import "time"
+import (
+	"errors"
+	"time"
+)
 
 type User struct {
 	ID           int64     `json:"id"`
@@ -8,3 +11,9 @@ type User struct {
 	PasswordHash string    `json:"-"`
 	CreatedAt    time.Time `json:"created_at"`
 }
+
+var (
+	ErrInvalidData       = errors.New("invalid data entry")
+	ErrMailAlreadyExists = errors.New("email already exists")
+	ErrUserNotFound      = errors.New("user not found")
+)

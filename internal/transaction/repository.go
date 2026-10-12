@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/Masterminds/squirrel"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -53,52 +54,44 @@ func (r *Repository) Create(ctx context.Context, tr *Transaction) (*Transaction,
 
 // List returns a page of the user's transactions, ordered by transaction date from newest to oldest.
 // Transactions with the same date are ordered by ID, from highest to lowest.
-// If accID is set, it includes only transactions where that account sends or receives money.
+// An account filter keeps transactions where that account sends or receives money.
+// A type filter keeps only expenses, income, or transfers, as requested.
 // It returns an empty slice when no transactions match.
 func (r *Repository) List(
 	ctx context.Context,
 	userID int64,
-	accID *int64,
-	limit,
-	offset int,
+	filters ListFilter,
 ) ([]*Transaction, error) {
-	args := make([]any, 0, 4)
-	args = append(args, userID, limit, offset)
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 
-	query := `
-		SELECT
-			id,
-			user_id,
-			from_acc_id,
-			to_acc_id,
-			type,
-			amount,
-			description,
-			occurred_at,
-			created_at
-		FROM transactions
-		WHERE user_id=$1
-		ORDER BY occurred_at DESC, id DESC
-		LIMIT $2 OFFSET $3;
-	`
-	if accID != nil {
-		query = `
-		SELECT
-			id,
-			user_id,
-			from_acc_id,
-			to_acc_id,
-			type,
-			amount,
-			description,
-			occurred_at,
-			created_at
-		FROM transactions
-		WHERE user_id=$1 AND (from_acc_id=$4 OR to_acc_id=$4)
-		ORDER BY occurred_at DESC, id DESC
-		LIMIT $2 OFFSET $3;
-	`
-		args = append(args, *accID)
+	qb := psql.Select(
+		"id",
+		"user_id",
+		"from_acc_id",
+		"to_acc_id",
+		"type",
+		"amount",
+		"description",
+		"occurred_at",
+		"created_at",
+	).From("transactions").Where(squirrel.Eq{"user_id": userID})
+
+	if filters.AccountID != nil {
+		qb = qb.Where(squirrel.Or{
+			squirrel.Eq{"from_acc_id": *filters.AccountID},
+			squirrel.Eq{"to_acc_id": *filters.AccountID},
+		})
+	}
+
+	if filters.Type != "" {
+		qb = qb.Where(squirrel.Eq{"type": filters.Type})
+	}
+
+	qb = qb.OrderBy("occurred_at DESC", "id DESC").Limit(uint64(filters.Limit)).Offset(uint64(filters.Offset))
+
+	query, args, err := qb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build sql query: %w", err)
 	}
 
 	rows, err := r.pool.Query(ctx, query, args...)
@@ -107,7 +100,7 @@ func (r *Repository) List(
 	}
 	defer rows.Close()
 
-	transactions := make([]*Transaction, 0, limit)
+	transactions := make([]*Transaction, 0, filters.Limit)
 
 	for rows.Next() {
 		var tr Transaction
@@ -132,4 +125,21 @@ func (r *Repository) List(
 	}
 
 	return transactions, nil
+}
+
+// Delete removes a transaction only if it belongs to the given user.
+// It returns ErrTransactionNotFound if the transaction is missing or belongs to someone else.
+func (r *Repository) Delete(ctx context.Context, trID, userID int64) error {
+	query := `
+		DELETE FROM transactions
+		WHERE id = $1 AND user_id = $2;
+	`
+	pg, err := r.pool.Exec(ctx, query, trID, userID)
+	if err != nil {
+		return fmt.Errorf("failed to execute sql query: %w", err)
+	}
+	if pg.RowsAffected() == 0 {
+		return ErrTransactionNotFound
+	}
+	return nil
 }

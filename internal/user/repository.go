@@ -10,11 +10,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-var (
-	ErrMailAlreadyExists = errors.New("email already exists")
-	ErrUserNotFound      = errors.New("user not found")
-)
-
 type Repository struct {
 	pool *pgxpool.Pool
 }
@@ -73,4 +68,25 @@ func (r *Repository) GetByEmail(ctx context.Context, email string) (*User, error
 	}
 
 	return &foundUser, nil
+}
+
+// GetByID loads the user's ID, email, and creation time without reading the password hash.
+// It returns ErrUserNotFound if no user has that ID.
+func (r *Repository) GetByID(ctx context.Context, userID int64) (*User, error) {
+	query := `
+		SELECT id, email, created_at FROM users
+		WHERE id = $1;
+	`
+	var user User
+	if err := r.pool.QueryRow(ctx, query, userID).Scan(
+		&user.ID,
+		&user.Email,
+		&user.CreatedAt,
+	); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrUserNotFound
+		}
+		return nil, fmt.Errorf("failed to execute sql query: %w", err)
+	}
+	return &user, nil
 }
