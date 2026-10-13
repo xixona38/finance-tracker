@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 
 	"github.com/xixona38/finance-tracker/internal/platform/httpresponse"
@@ -13,13 +14,15 @@ import (
 type Handler struct {
 	svc          *Service
 	cookieSecure bool
+	logger       *slog.Logger
 }
 
 // NewHandler sets up the registration, login, and logout handlers using the given service.
-func NewHandler(svc *Service, cookieSecure bool) *Handler {
+func NewHandler(svc *Service, cookieSecure bool, logger *slog.Logger) *Handler {
 	return &Handler{
 		svc:          svc,
 		cookieSecure: cookieSecure,
+		logger:       logger,
 	}
 }
 
@@ -44,41 +47,46 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	if err := decoder.Decode(&req); err != nil {
 		var maxBytesErr *http.MaxBytesError
 		if errors.As(err, &maxBytesErr) {
-			httpresponse.WriteError(w, http.StatusRequestEntityTooLarge, maxBytesErr.Error())
+			httpresponse.WriteError(w, http.StatusRequestEntityTooLarge, maxBytesErr.Error(), h.logger)
 			return
 		}
-		httpresponse.WriteError(w, http.StatusBadRequest, "failed to decode json")
+		httpresponse.WriteError(w, http.StatusBadRequest, "failed to decode json", h.logger)
 		return
 	}
 
 	if err := decoder.Decode(&emptyVar); err != io.EOF {
 		var maxBytesErr *http.MaxBytesError
 		if errors.As(err, &maxBytesErr) {
-			httpresponse.WriteError(w, http.StatusRequestEntityTooLarge, maxBytesErr.Error())
+			httpresponse.WriteError(w, http.StatusRequestEntityTooLarge, maxBytesErr.Error(), h.logger)
 			return
 		}
 
-		httpresponse.WriteError(w, http.StatusBadRequest, "too much data")
+		httpresponse.WriteError(w, http.StatusBadRequest, "too much data", h.logger)
 		return
 	}
 
 	registeredUser, err := h.svc.Register(r.Context(), req.Email, req.Password)
 	if err != nil {
 		if errors.Is(err, ErrValidation) {
-			httpresponse.WriteError(w, http.StatusBadRequest, err.Error())
+			httpresponse.WriteError(w, http.StatusBadRequest, err.Error(), h.logger)
 			return
 		}
 
 		if errors.Is(err, user.ErrMailAlreadyExists) {
-			httpresponse.WriteError(w, http.StatusConflict, err.Error())
+			httpresponse.WriteError(w, http.StatusConflict, err.Error(), h.logger)
 			return
 		}
 
-		httpresponse.WriteError(w, http.StatusInternalServerError, "failed to register a user")
+		h.logger.ErrorContext(
+			r.Context(),
+			"Failed to register user",
+			"error", err,
+		)
+		httpresponse.WriteError(w, http.StatusInternalServerError, "failed to register a user", h.logger)
 		return
 	}
 
-	httpresponse.WriteJSON(w, http.StatusCreated, registeredUser)
+	httpresponse.WriteJSON(w, http.StatusCreated, registeredUser, h.logger)
 
 }
 
@@ -94,37 +102,42 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	if err := decoder.Decode(&req); err != nil {
 		var maxBytesErr *http.MaxBytesError
 		if errors.As(err, &maxBytesErr) {
-			httpresponse.WriteError(w, http.StatusRequestEntityTooLarge, maxBytesErr.Error())
+			httpresponse.WriteError(w, http.StatusRequestEntityTooLarge, maxBytesErr.Error(), h.logger)
 			return
 		}
 
-		httpresponse.WriteError(w, http.StatusBadRequest, "failed to decode json")
+		httpresponse.WriteError(w, http.StatusBadRequest, "failed to decode json", h.logger)
 		return
 	}
 
 	if err := decoder.Decode(&emptyData); err != io.EOF {
 		var maxBytesErr *http.MaxBytesError
 		if errors.As(err, &maxBytesErr) {
-			httpresponse.WriteError(w, http.StatusRequestEntityTooLarge, maxBytesErr.Error())
+			httpresponse.WriteError(w, http.StatusRequestEntityTooLarge, maxBytesErr.Error(), h.logger)
 			return
 		}
-		httpresponse.WriteError(w, http.StatusBadRequest, "too much data")
+		httpresponse.WriteError(w, http.StatusBadRequest, "too much data", h.logger)
 		return
 	}
 
 	loginResult, err := h.svc.Login(r.Context(), req.Email, req.Password)
 	if err != nil {
 		if errors.Is(err, ErrValidation) {
-			httpresponse.WriteError(w, http.StatusBadRequest, err.Error())
+			httpresponse.WriteError(w, http.StatusBadRequest, err.Error(), h.logger)
 			return
 		}
 
 		if errors.Is(err, ErrInvalidCredentials) {
-			httpresponse.WriteError(w, http.StatusUnauthorized, "wrong password or email")
+			httpresponse.WriteError(w, http.StatusUnauthorized, "wrong password or email", h.logger)
 			return
 		}
 
-		httpresponse.WriteError(w, http.StatusInternalServerError, "failed to sign in")
+		h.logger.ErrorContext(
+			r.Context(),
+			"Failed to sign in",
+			"error", err,
+		)
+		httpresponse.WriteError(w, http.StatusInternalServerError, "failed to sign in", h.logger)
 		return
 	}
 
@@ -138,7 +151,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteLaxMode,
 	})
 
-	httpresponse.WriteJSON(w, http.StatusOK, loginResult.User)
+	httpresponse.WriteJSON(w, http.StatusOK, loginResult.User, h.logger)
 }
 
 // Logout ends the session and tells the client to remove its session cookie.
@@ -160,7 +173,12 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.svc.Logout(r.Context(), token.Value); err != nil {
-		httpresponse.WriteError(w, http.StatusInternalServerError, "failed to logout")
+		h.logger.ErrorContext(
+			r.Context(),
+			"Failed to logout",
+			"error", err,
+		)
+		httpresponse.WriteError(w, http.StatusInternalServerError, "failed to logout", h.logger)
 		return
 	}
 

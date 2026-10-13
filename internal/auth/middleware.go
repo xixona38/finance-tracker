@@ -2,6 +2,7 @@ package auth
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/xixona38/finance-tracker/internal/platform/httpresponse"
@@ -13,13 +14,15 @@ import (
 type Middleware struct {
 	ses          *session.Service
 	cookieSecure bool
+	logger       *slog.Logger
 }
 
 // NewMiddleware sets up session checks using the given session service.
-func NewMiddleware(session *session.Service, cookieSecure bool) *Middleware {
+func NewMiddleware(session *session.Service, cookieSecure bool, logger *slog.Logger) *Middleware {
 	return &Middleware{
 		ses:          session,
 		cookieSecure: cookieSecure,
+		logger:       logger,
 	}
 }
 
@@ -30,18 +33,23 @@ func (m *Middleware) RequireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		cookie, err := r.Cookie("session")
 		if err != nil {
-			httpresponse.WriteError(w, http.StatusUnauthorized, "session token not found")
+			httpresponse.WriteError(w, http.StatusUnauthorized, "session token not found", m.logger)
 			return
 		}
 
 		sessionFound, err := m.ses.Renew(r.Context(), cookie.Value)
 		if err != nil {
 			if errors.Is(err, session.ErrSessionExpired) || errors.Is(err, session.ErrSessionNotFound) {
-				httpresponse.WriteError(w, http.StatusUnauthorized, "session expired or not found")
+				httpresponse.WriteError(w, http.StatusUnauthorized, "session expired or not found", m.logger)
 				return
 			}
 
-			httpresponse.WriteError(w, http.StatusInternalServerError, "an error occurred")
+			m.logger.ErrorContext(
+				r.Context(),
+				"Failed to renew session",
+				"error", err,
+			)
+			httpresponse.WriteError(w, http.StatusInternalServerError, "an error occurred", m.logger)
 			return
 		}
 

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
@@ -14,7 +15,8 @@ import (
 )
 
 type Handler struct {
-	svc *Service
+	svc    *Service
+	logger *slog.Logger
 }
 
 type transactionDTO struct {
@@ -27,9 +29,10 @@ type transactionDTO struct {
 }
 
 // NewHandler sets up the transaction handlers using the given transaction service.
-func NewHandler(svc *Service) *Handler {
+func NewHandler(svc *Service, logger *slog.Logger) *Handler {
 	return &Handler{
-		svc: svc,
+		svc:    svc,
+		logger: logger,
 	}
 }
 
@@ -38,7 +41,7 @@ func NewHandler(svc *Service) *Handler {
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	userID, ok := requestcontext.UserIDFromContext(r.Context())
 	if !ok {
-		httpresponse.WriteError(w, http.StatusUnauthorized, "authentication required")
+		httpresponse.WriteError(w, http.StatusUnauthorized, "authentication required", h.logger)
 		return
 	}
 
@@ -50,20 +53,20 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	if err := decoder.Decode(&trDTO); err != nil {
 		var maxBytesErr *http.MaxBytesError
 		if errors.As(err, &maxBytesErr) {
-			httpresponse.WriteError(w, http.StatusRequestEntityTooLarge, maxBytesErr.Error())
+			httpresponse.WriteError(w, http.StatusRequestEntityTooLarge, maxBytesErr.Error(), h.logger)
 			return
 		}
-		httpresponse.WriteError(w, http.StatusBadRequest, "failed to decode json")
+		httpresponse.WriteError(w, http.StatusBadRequest, "failed to decode json", h.logger)
 		return
 	}
 
 	if err := decoder.Decode(&emptyVar); err != io.EOF {
 		var maxBytesErr *http.MaxBytesError
 		if errors.As(err, &maxBytesErr) {
-			httpresponse.WriteError(w, http.StatusRequestEntityTooLarge, "too much data")
+			httpresponse.WriteError(w, http.StatusRequestEntityTooLarge, "too much data", h.logger)
 			return
 		}
-		httpresponse.WriteError(w, http.StatusBadRequest, "too much data")
+		httpresponse.WriteError(w, http.StatusBadRequest, "too much data", h.logger)
 		return
 	}
 
@@ -80,18 +83,25 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	res, err := h.svc.Create(r.Context(), &tr)
 	if err != nil {
 		if errors.Is(err, ErrInvalidData) {
-			httpresponse.WriteError(w, http.StatusBadRequest, err.Error())
+			httpresponse.WriteError(w, http.StatusBadRequest, err.Error(), h.logger)
 			return
 		}
 		if errors.Is(err, account.ErrAccountNotFound) {
-			httpresponse.WriteError(w, http.StatusNotFound, "account not found")
+			httpresponse.WriteError(w, http.StatusNotFound, "account not found", h.logger)
 			return
 		}
-		httpresponse.WriteError(w, http.StatusInternalServerError, "an error occurred")
+
+		h.logger.ErrorContext(
+			r.Context(),
+			"Failed to create a new transaction",
+			"error", err,
+			"user_id", userID,
+		)
+		httpresponse.WriteError(w, http.StatusInternalServerError, "an error occurred", h.logger)
 		return
 	}
 
-	httpresponse.WriteJSON(w, http.StatusCreated, res)
+	httpresponse.WriteJSON(w, http.StatusCreated, res, h.logger)
 }
 
 // List returns the logged-in user's transaction history as JSON.
@@ -100,7 +110,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	userID, ok := requestcontext.UserIDFromContext(r.Context())
 	if !ok {
-		httpresponse.WriteError(w, http.StatusUnauthorized, "authentication required")
+		httpresponse.WriteError(w, http.StatusUnauthorized, "authentication required", h.logger)
 		return
 	}
 	var accID *int64
@@ -117,7 +127,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	if lim != "" {
 		val, err := strconv.Atoi(lim)
 		if err != nil {
-			httpresponse.WriteError(w, http.StatusBadRequest, "limit must be an integer")
+			httpresponse.WriteError(w, http.StatusBadRequest, "limit must be an integer", h.logger)
 			return
 		}
 		limit = val
@@ -126,7 +136,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	if off != "" {
 		val, err := strconv.Atoi(off)
 		if err != nil {
-			httpresponse.WriteError(w, http.StatusBadRequest, "offset must be an integer")
+			httpresponse.WriteError(w, http.StatusBadRequest, "offset must be an integer", h.logger)
 			return
 		}
 		offset = val
@@ -135,7 +145,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	if acc != "" {
 		val, err := strconv.ParseInt(acc, 10, 64)
 		if err != nil {
-			httpresponse.WriteError(w, http.StatusBadRequest, "account must be an integer")
+			httpresponse.WriteError(w, http.StatusBadRequest, "account must be an integer", h.logger)
 			return
 		}
 		accID = &val
@@ -151,14 +161,21 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	trs, err := h.svc.List(r.Context(), userID, filter)
 	if err != nil {
 		if errors.Is(err, ErrInvalidData) {
-			httpresponse.WriteError(w, http.StatusBadRequest, "invalid data")
+			httpresponse.WriteError(w, http.StatusBadRequest, "invalid data", h.logger)
 			return
 		}
-		httpresponse.WriteError(w, http.StatusInternalServerError, "an error occurred")
+
+		h.logger.ErrorContext(
+			r.Context(),
+			"Failed to list user's transactions",
+			"error", err,
+			"user_id", userID,
+		)
+		httpresponse.WriteError(w, http.StatusInternalServerError, "an error occurred", h.logger)
 		return
 	}
 
-	httpresponse.WriteJSON(w, http.StatusOK, trs)
+	httpresponse.WriteJSON(w, http.StatusOK, trs, h.logger)
 }
 
 // Delete reads the transaction ID from the URL path and deletes it for the logged-in user.
@@ -166,31 +183,39 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	userID, ok := requestcontext.UserIDFromContext(r.Context())
 	if !ok {
-		httpresponse.WriteError(w, http.StatusUnauthorized, "authentication required")
+		httpresponse.WriteError(w, http.StatusUnauthorized, "authentication required", h.logger)
 		return
 	}
 
 	trIDStr := r.PathValue("id")
 	if trIDStr == "" {
-		httpresponse.WriteError(w, http.StatusBadRequest, "transaction id required")
+		httpresponse.WriteError(w, http.StatusBadRequest, "transaction id required", h.logger)
 		return
 	}
 	trId, err := strconv.ParseInt(trIDStr, 10, 64)
 	if err != nil {
-		httpresponse.WriteError(w, http.StatusBadRequest, "transaction id must be an integer")
+		httpresponse.WriteError(w, http.StatusBadRequest, "transaction id must be an integer", h.logger)
 		return
 	}
 
 	if err := h.svc.Delete(r.Context(), trId, userID); err != nil {
 		if errors.Is(err, ErrTransactionNotFound) {
-			httpresponse.WriteError(w, http.StatusNotFound, "transaction not found")
+			httpresponse.WriteError(w, http.StatusNotFound, "transaction not found", h.logger)
 			return
 		}
 		if errors.Is(err, ErrInvalidData) {
-			httpresponse.WriteError(w, http.StatusBadRequest, "invalid data")
+			httpresponse.WriteError(w, http.StatusBadRequest, "invalid data", h.logger)
 			return
 		}
-		httpresponse.WriteError(w, http.StatusInternalServerError, "an error occurred")
+
+		h.logger.ErrorContext(
+			r.Context(),
+			"Failed to delete user's transaction",
+			"error", err,
+			"user_id", userID,
+			"transaction_id", trId,
+		)
+		httpresponse.WriteError(w, http.StatusInternalServerError, "an error occurred", h.logger)
 		return
 	}
 
