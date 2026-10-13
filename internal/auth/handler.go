@@ -18,6 +18,7 @@ type Handler struct {
 }
 
 // NewHandler sets up the registration, login, and logout handlers using the given service.
+// It uses cookieSecure to control HTTPS-only cookies and the logger to report internal errors.
 func NewHandler(svc *Service, cookieSecure bool, logger *slog.Logger) *Handler {
 	return &Handler{
 		svc:          svc,

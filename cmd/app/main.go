@@ -14,13 +14,14 @@ import (
 	"github.com/xixona38/finance-tracker/internal/auth"
 	"github.com/xixona38/finance-tracker/internal/config"
 	"github.com/xixona38/finance-tracker/internal/platform/database"
+	"github.com/xixona38/finance-tracker/internal/platform/httpmiddleware"
 	"github.com/xixona38/finance-tracker/internal/server"
 	"github.com/xixona38/finance-tracker/internal/session"
 	"github.com/xixona38/finance-tracker/internal/transaction"
 	"github.com/xixona38/finance-tracker/internal/user"
 )
 
-// main connects to the database, sets up the application, and starts the HTTP server.
+// main loads configuration, sets up logging and application dependencies, and starts the HTTP server.
 // On shutdown, it gives active requests time to finish before closing the database pool.
 func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
@@ -66,9 +67,12 @@ func main() {
 
 	mux := server.NewRouter(accHand, authHand, trHand, userHand, mw)
 
+	// Wrap the whole router so rejected requests and unknown routes are logged too.
+	handler := httpmiddleware.Logging(logger, mux)
+
 	server := http.Server{
 		Addr:              cnfg.HTTPAddr,
-		Handler:           mux,
+		Handler:           handler,
 		ReadHeaderTimeout: time.Second * 5,
 	}
 

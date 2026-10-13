@@ -14,7 +14,7 @@ type Handler struct {
 	logger *slog.Logger
 }
 
-// NewHandler sets up user handlers using the given user service.
+// NewHandler sets up user handlers with a service and a logger for internal errors.
 func NewHandler(svc *Service, logger *slog.Logger) *Handler {
 	return &Handler{
 		svc:    svc,

@@ -7,6 +7,7 @@ import (
 	"time"
 )
 
+// Config holds the database address, HTTP address, session lifetimes, and cookie security setting.
 type Config struct {
 	DatabaseURL        string
 	HTTPAddr           string
@@ -15,6 +16,8 @@ type Config struct {
 	CookieSecure       bool
 }
 
+// Load reads settings from the process environment and parses durations and the cookie security flag.
+// It returns an error if a required value is missing, empty, or cannot be parsed.
 func Load() (Config, error) {
 	config := Config{}
 	pgURL, ok := os.LookupEnv("PG_URL")
