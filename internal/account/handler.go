@@ -23,7 +23,7 @@ type accountDTO struct {
 	InitialBalance int64  `json:"initial_balance"`
 }
 
-// NewHandler sets up the account handlers using the given account service.
+// NewHandler sets up account handlers with a service and a logger for internal errors.
 func NewHandler(svc *Service, logger *slog.Logger) *Handler {
 	return &Handler{
 		svc:    svc,

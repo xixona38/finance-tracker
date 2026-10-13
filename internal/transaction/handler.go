@@ -28,7 +28,7 @@ type transactionDTO struct {
 	OccurredAt  time.Time `json:"occurred_at"`
 }
 
-// NewHandler sets up the transaction handlers using the given transaction service.
+// NewHandler sets up transaction handlers with a service and a logger for internal errors.
 func NewHandler(svc *Service, logger *slog.Logger) *Handler {
 	return &Handler{
 		svc:    svc,
