@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 
 	"github.com/xixona38/finance-tracker/internal/platform/httpresponse"
@@ -11,7 +12,8 @@ import (
 )
 
 type Handler struct {
-	svc *Service
+	svc    *Service
+	logger *slog.Logger
 }
 
 type accountDTO struct {
@@ -22,9 +24,10 @@ type accountDTO struct {
 }
 
 // NewHandler sets up the account handlers using the given account service.
-func NewHandler(svc *Service) *Handler {
+func NewHandler(svc *Service, logger *slog.Logger) *Handler {
 	return &Handler{
-		svc: svc,
+		svc:    svc,
+		logger: logger,
 	}
 }
 
@@ -33,7 +36,7 @@ func NewHandler(svc *Service) *Handler {
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	userID, ok := requestcontext.UserIDFromContext(r.Context())
 	if !ok {
-		httpresponse.WriteError(w, http.StatusUnauthorized, "authentication required")
+		httpresponse.WriteError(w, http.StatusUnauthorized, "authentication required", h.logger)
 		return
 	}
 
@@ -45,20 +48,20 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	if err := decoder.Decode(&accDTO); err != nil {
 		var maxBytesErr *http.MaxBytesError
 		if errors.As(err, &maxBytesErr) {
-			httpresponse.WriteError(w, http.StatusRequestEntityTooLarge, maxBytesErr.Error())
+			httpresponse.WriteError(w, http.StatusRequestEntityTooLarge, maxBytesErr.Error(), h.logger)
 			return
 		}
-		httpresponse.WriteError(w, http.StatusBadRequest, "failed to decode json")
+		httpresponse.WriteError(w, http.StatusBadRequest, "failed to decode json", h.logger)
 		return
 	}
 
 	if err := decoder.Decode(&emptyVar); err != io.EOF {
 		var maxBytesErr *http.MaxBytesError
 		if errors.As(err, &maxBytesErr) {
-			httpresponse.WriteError(w, http.StatusRequestEntityTooLarge, maxBytesErr.Error())
+			httpresponse.WriteError(w, http.StatusRequestEntityTooLarge, maxBytesErr.Error(), h.logger)
 			return
 		}
-		httpresponse.WriteError(w, http.StatusBadRequest, "too much data")
+		httpresponse.WriteError(w, http.StatusBadRequest, "too much data", h.logger)
 		return
 	}
 	acc := Account{
@@ -71,14 +74,19 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	createdAcc, err := h.svc.Create(r.Context(), acc)
 	if err != nil {
 		if errors.Is(err, ErrValidation) {
-			httpresponse.WriteError(w, http.StatusBadRequest, err.Error())
+			httpresponse.WriteError(w, http.StatusBadRequest, err.Error(), h.logger)
 			return
 		}
-
-		httpresponse.WriteError(w, http.StatusInternalServerError, "failed to create an account")
+		h.logger.ErrorContext(
+			r.Context(),
+			"Failed to create account",
+			"error", err,
+			"user_id", userID,
+		)
+		httpresponse.WriteError(w, http.StatusInternalServerError, "failed to create an account", h.logger)
 		return
 	}
-	httpresponse.WriteJSON(w, http.StatusCreated, createdAcc)
+	httpresponse.WriteJSON(w, http.StatusCreated, createdAcc, h.logger)
 }
 
 // List returns the logged-in user's accounts and current balances as JSON.
@@ -86,14 +94,20 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	userID, ok := requestcontext.UserIDFromContext(r.Context())
 	if !ok {
-		httpresponse.WriteError(w, http.StatusUnauthorized, "authentication required")
+		httpresponse.WriteError(w, http.StatusUnauthorized, "authentication required", h.logger)
 		return
 	}
 	accounts, err := h.svc.List(r.Context(), userID)
 	if err != nil {
-		httpresponse.WriteError(w, http.StatusInternalServerError, "failed to get accounts")
+		h.logger.ErrorContext(
+			r.Context(),
+			"Failed to list accounts",
+			"error", err,
+			"user_id", userID,
+		)
+		httpresponse.WriteError(w, http.StatusInternalServerError, "failed to get accounts", h.logger)
 		return
 	}
 
-	httpresponse.WriteJSON(w, http.StatusOK, accounts)
+	httpresponse.WriteJSON(w, http.StatusOK, accounts, h.logger)
 }

@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"errors"
-	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -23,9 +23,11 @@ import (
 // main connects to the database, sets up the application, and starts the HTTP server.
 // On shutdown, it gives active requests time to finish before closing the database pool.
 func main() {
+	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+
 	cnfg, err := config.Load()
 	if err != nil {
-		fmt.Println("Failed to load config:", err)
+		logger.Error("Failed to load config", "error", err)
 		return
 	}
 
@@ -34,33 +36,33 @@ func main() {
 
 	pool, err := database.NewPool(ctx, cnfg.DatabaseURL)
 	if err != nil {
-		fmt.Println(err)
+		logger.Error("Failed to connect to database", "error", err)
 		return
 	}
 	defer pool.Close()
 
 	accRepo := account.NewRepository(pool)
 	accSvc := account.NewService(accRepo)
-	accHand := account.NewHandler(accSvc)
+	accHand := account.NewHandler(accSvc, logger)
 
 	sessionRepo := session.NewSessionRepo(pool)
 	sessionSvc, err := session.NewService(sessionRepo, cnfg.SessionIdleTTL, cnfg.SessionAbsoluteTTL)
 	if err != nil {
-		fmt.Println(err)
+		logger.Error("Failed to create session service struct", "error", err)
 		return
 	}
 
 	userRepo := user.NewRepository(pool)
 	userSvc := user.NewService(userRepo)
-	userHand := user.NewHandler(userSvc)
+	userHand := user.NewHandler(userSvc, logger)
 
 	authSvc := auth.NewService(userRepo, sessionSvc)
-	authHand := auth.NewHandler(authSvc, cnfg.CookieSecure)
-	mw := auth.NewMiddleware(sessionSvc, cnfg.CookieSecure)
+	authHand := auth.NewHandler(authSvc, cnfg.CookieSecure, logger)
+	mw := auth.NewMiddleware(sessionSvc, cnfg.CookieSecure, logger)
 
 	trRepo := transaction.NewRepository(pool)
 	trSvc := transaction.NewService(trRepo, accRepo)
-	trHand := transaction.NewHandler(trSvc)
+	trHand := transaction.NewHandler(trSvc, logger)
 
 	mux := server.NewRouter(accHand, authHand, trHand, userHand, mw)
 
@@ -77,6 +79,7 @@ func main() {
 	// Keep room for one result so the server goroutine can finish even during shutdown.
 	errChan := make(chan error, 1)
 
+	logger.Info("Starting HTTP server", "addr", cnfg.HTTPAddr)
 	// Serve requests while main waits for a signal or a server error.
 	go func() {
 		err := server.ListenAndServe()
@@ -85,11 +88,11 @@ func main() {
 
 	select {
 	case <-sigCtx.Done():
-		fmt.Print("shutdown signal received\n")
+		logger.Info("Shutdown signal received")
 
 	case err := <-errChan:
 		if !errors.Is(err, http.ErrServerClosed) {
-			fmt.Println("HTTP server error:", err)
+			logger.Error("HTTP server error", "error", err)
 		}
 	}
 
@@ -102,15 +105,15 @@ func main() {
 
 	// Stop accepting new connections and wait up to ten seconds for active requests.
 	if err := server.Shutdown(shutdownCtx); err != nil {
-		fmt.Println("Graceful shutdown failed:", err)
+		logger.Error("Graceful shutdown failed", "error", err)
 
 		// A failed Shutdown does not force active connections to close.
 		if closeErr := server.Close(); closeErr != nil {
-			fmt.Println("Failed to close HTTP server:", closeErr)
+			logger.Error("Failed to close HTTP server", "error", closeErr)
 		}
 
 		return
 	}
 
-	fmt.Println("HTTP server stopped")
+	logger.Info("HTTP server stopped")
 }

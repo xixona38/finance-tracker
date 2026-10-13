@@ -2,6 +2,7 @@ package user
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/xixona38/finance-tracker/internal/platform/httpresponse"
@@ -9,13 +10,15 @@ import (
 )
 
 type Handler struct {
-	svc *Service
+	svc    *Service
+	logger *slog.Logger
 }
 
 // NewHandler sets up user handlers using the given user service.
-func NewHandler(svc *Service) *Handler {
+func NewHandler(svc *Service, logger *slog.Logger) *Handler {
 	return &Handler{
-		svc: svc,
+		svc:    svc,
+		logger: logger,
 	}
 }
 
@@ -24,23 +27,30 @@ func NewHandler(svc *Service) *Handler {
 func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 	userID, ok := requestcontext.UserIDFromContext(r.Context())
 	if !ok {
-		httpresponse.WriteError(w, http.StatusUnauthorized, "authentication required")
+		httpresponse.WriteError(w, http.StatusUnauthorized, "authentication required", h.logger)
 		return
 	}
 
 	user, err := h.svc.GetByID(r.Context(), userID)
 	if err != nil {
 		if errors.Is(err, ErrInvalidData) {
-			httpresponse.WriteError(w, http.StatusBadRequest, "invalid data")
+			httpresponse.WriteError(w, http.StatusBadRequest, "invalid data", h.logger)
 			return
 		}
 		if errors.Is(err, ErrUserNotFound) {
-			httpresponse.WriteError(w, http.StatusNotFound, "user not found")
+			httpresponse.WriteError(w, http.StatusNotFound, "user not found", h.logger)
 			return
 		}
-		httpresponse.WriteError(w, http.StatusInternalServerError, "an error occurred")
+
+		h.logger.ErrorContext(
+			r.Context(),
+			"Failed to get user details",
+			"error", err,
+			"user_id", userID,
+		)
+		httpresponse.WriteError(w, http.StatusInternalServerError, "an error occurred", h.logger)
 		return
 	}
 
-	httpresponse.WriteJSON(w, http.StatusOK, user)
+	httpresponse.WriteJSON(w, http.StatusOK, user, h.logger)
 }
