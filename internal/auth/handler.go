@@ -11,13 +11,15 @@ import (
 )
 
 type Handler struct {
-	svc *Service
+	svc          *Service
+	cookieSecure bool
 }
 
 // NewHandler sets up the registration, login, and logout handlers using the given service.
-func NewHandler(svc *Service) *Handler {
+func NewHandler(svc *Service, cookieSecure bool) *Handler {
 	return &Handler{
-		svc: svc,
+		svc:          svc,
+		cookieSecure: cookieSecure,
 	}
 }
 
@@ -132,7 +134,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 		Expires:  loginResult.ExpiresAt,
 		HttpOnly: true,
-		Secure:   true,
+		Secure:   h.cookieSecure,
 		SameSite: http.SameSiteLaxMode,
 	})
 
@@ -150,7 +152,7 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 			Path:     "/",
 			MaxAge:   -1,
 			HttpOnly: true,
-			Secure:   true,
+			Secure:   h.cookieSecure,
 			SameSite: http.SameSiteLaxMode,
 		})
 		w.WriteHeader(http.StatusNoContent)
@@ -168,7 +170,7 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 		MaxAge:   -1,
 		HttpOnly: true,
-		Secure:   true,
+		Secure:   h.cookieSecure,
 		SameSite: http.SameSiteLaxMode,
 	})
 
