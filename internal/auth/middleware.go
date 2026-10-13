@@ -11,13 +11,15 @@ import (
 )
 
 type Middleware struct {
-	ses *session.Service
+	ses          *session.Service
+	cookieSecure bool
 }
 
 // NewMiddleware sets up session checks using the given session service.
-func NewMiddleware(session *session.Service) *Middleware {
+func NewMiddleware(session *session.Service, cookieSecure bool) *Middleware {
 	return &Middleware{
-		ses: session,
+		ses:          session,
+		cookieSecure: cookieSecure,
 	}
 }
 
@@ -51,7 +53,7 @@ func (m *Middleware) RequireAuth(next http.Handler) http.Handler {
 			Path:     "/",
 			Expires:  sessionFound.ExpiresAt,
 			HttpOnly: true,
-			Secure:   true,
+			Secure:   m.cookieSecure,
 			SameSite: http.SameSiteLaxMode,
 		})
 
