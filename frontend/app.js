@@ -1,4 +1,5 @@
 import { accountTypes, operationTypes, escapeHTML as esc, money, toMinorUnits, localDateTime } from './lib.js';
+import { enhanceSelects, closeSelect } from './select.js';
 
 const app = document.querySelector('#app');
 const dialog = document.querySelector('#dialog');
@@ -8,7 +9,7 @@ let loadSequence = 0;
 let toastTimer;
 let dialogTrigger;
 const paths = {
-  logo: 'M5 19V5h14M5 11h10', grid: 'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z',
+  grid: 'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z',
   wallet: 'M4 5h15v4M4 5a2 2 0 0 0 0 4h17v11H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2M17 13h4v4h-4z',
   history: 'M3 11a9 9 0 1 1 2.6 7M3 4v7h7M12 7v5l3 2', plus: 'M12 5v14M5 12h14',
   arrow: 'M7 17 17 7M7 7h10v10', income: 'M17 7 7 17M7 7v10h10', expense: 'M7 17 17 7M7 7h10v10',
@@ -20,7 +21,7 @@ const paths = {
   savings: 'M12 3v18M7 7h7a3 3 0 0 1 0 6h-4a3 3 0 0 0 0 6h7', refresh: 'M20 8a8 8 0 0 0-14-3L3 8M3 3v5h5M4 16a8 8 0 0 0 14 3l3-3M21 21v-5h-5',
 };
 const icon = name => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${paths[name] || paths.wallet}"/></svg>`;
-const brand = (extra = '') => `<a href="#" class="brand ${extra}" aria-label="Тихо — главная"><span class="brand-mark">${icon('logo')}</span><span>тихо<small>ЛИЧНЫЕ ФИНАНСЫ</small></span></a>`;
+const brand = (extra = '') => `<a href="#" class="brand ${extra}" aria-label="На главную"><img src="/favicon.svg" width="44" height="44" alt=""></a>`;
 const accountName = id => state.accounts.find(a => a.id === id)?.name || 'Счёт недоступен';
 const today = () => new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date());
 const dateLabel = iso => {
@@ -64,9 +65,10 @@ async function api(path, options = {}) {
   return data;
 }
 function renderAuth(message = '') {
+  closeSelect();
   const register = state.authMode === 'register';
   app.innerHTML = `<main class="auth-page">
-    <section class="auth-story">${brand()}<div><div class="eyebrow">МЕНЬШЕ ШУМА. БОЛЬШЕ ЯСНОСТИ.</div><h1>Ваши деньги.<br>Ваш <span>спокойный</span><br>ритм.</h1><p>Счета, повседневные расходы и большие планы. Всё важное о ваших финансах — в одном месте.</p><div class="story-art" aria-hidden="true"><div class="art-card"></div><div class="art-card front">${icon('wallet')}<div class="art-lines"><i></i><i></i><i></i><i></i><i></i><i></i></div></div></div></div><footer>Без лишних деталей. С вниманием к главному.</footer></section>
+    <section class="auth-story">${brand()}<div class="story-copy"><div class="eyebrow">МЕНЬШЕ ШУМА. БОЛЬШЕ ЯСНОСТИ.</div><h1>Ваши деньги.<br>Ничего<br><span>лишнего.</span></h1><p>Счета, повседневные расходы и большие планы. Всё важное о ваших финансах — в одном месте.</p></div><div class="story-art" aria-hidden="true">₽</div><footer><span>01 / ЯСНОСТЬ</span><span>С вниманием к главному.</span></footer></section>
     <section class="auth-panel"><div class="auth-box"><div class="eyebrow">ЛИЧНОЕ ПРОСТРАНСТВО</div><h2>${register ? 'Начнём с чистого листа' : 'С возвращением'}</h2><p>${register ? 'Создайте аккаунт и добавьте свой первый счёт.' : 'Войдите, чтобы увидеть полную картину.'}</p>
     <div class="auth-switch"><button type="button" data-auth="login" class="${!register ? 'active' : ''}">Вход</button><button type="button" data-auth="register" class="${register ? 'active' : ''}">Регистрация</button></div>
     <form id="auth-form" class="form"><label class="field">Email<input name="email" type="email" autocomplete="username" placeholder="you@example.com" required></label><label class="field">Пароль<input name="password" type="password" autocomplete="${register ? 'new-password' : 'current-password'}" required placeholder="Не менее 15 символов"><small>От 15 до 128 символов. Можно использовать длинную фразу.</small></label>${register ? '<label class="field">Повторите пароль<input name="confirm" type="password" autocomplete="new-password" required placeholder="Ещё раз, чтобы не ошибиться"></label>' : ''}<p class="form-error" role="alert">${esc(message)}</p><button class="button primary" type="submit">${register ? 'Создать аккаунт' : 'Войти'} ${icon('arrow')}</button></form>
@@ -96,18 +98,20 @@ function renderAuth(message = '') {
   });
 }
 function render() {
+  closeSelect();
   if (!state.user) return renderAuth();
-  const titles = { overview: ['Всё под контролем.', 'Ваши финансы — без лишнего шума.'], accounts: ['Мои счета', 'Каждому счёту — своё место.'], history: ['История операций', 'Всё, что приходит и уходит.'] };
+  const titles = { overview: ['Обзор', ''], accounts: ['Мои счета', 'Каждому счёту — своё место.'], history: ['История операций', 'Всё, что приходит и уходит.'] };
   const [title, subtitle] = titles[state.view];
-  app.innerHTML = `<div class="shell"><aside class="sidebar">${brand()}<div class="nav-label">ВАШЕ ПРОСТРАНСТВО</div><nav class="nav" aria-label="Основная навигация">${[['overview', 'grid', 'Обзор'], ['accounts', 'wallet', 'Счета'], ['history', 'history', 'Операции']].map(([view, symbol, label]) => `<button data-view="${view}" class="${state.view === view ? 'active' : ''}" ${state.view === view ? 'aria-current="page"' : ''}>${icon(symbol)}${label}${state.view === view ? '<span class="nav-dot"></span>' : ''}</button>`).join('')}</nav><div class="sidebar-bottom"><div class="sidebar-note">${icon('shield')}<strong>Ваш личный баланс</strong>Маленькие привычки.<br>Большая ясность.</div><div class="profile"><span class="avatar">${esc(state.user.email[0].toUpperCase())}</span><div class="profile-info"><strong>${esc(state.user.email)}</strong><span>${state.demo ? 'Деморежим' : 'Личный аккаунт'}</span></div><button class="icon-button" data-action="logout" aria-label="Выйти" title="Выйти">${icon('logout')}</button></div></div></aside>
+  app.innerHTML = `<div class="shell"><aside class="sidebar">${brand()}<div class="nav-label">ВАШЕ ПРОСТРАНСТВО</div><nav class="nav" aria-label="Основная навигация">${[['overview', 'grid', 'Обзор'], ['accounts', 'wallet', 'Счета'], ['history', 'history', 'Операции']].map(([view, symbol, label]) => `<button data-view="${view}" class="${state.view === view ? 'active' : ''}" ${state.view === view ? 'aria-current="page"' : ''}>${icon(symbol)}${label}${state.view === view ? '<span class="nav-dot"></span>' : ''}</button>`).join('')}</nav><div class="sidebar-bottom"><div class="profile"><span class="avatar">${esc(state.user.email[0].toUpperCase())}</span><div class="profile-info"><strong>${esc(state.user.email)}</strong><span>${state.demo ? 'Деморежим' : 'Личный аккаунт'}</span></div><button class="icon-button" data-action="logout" aria-label="Выйти" title="Выйти">${icon('logout')}</button></div></div></aside>
     <main class="workspace"><header class="topbar"><div class="topbar-left">${icon('grid')} Пространство <span>/</span> <span>${state.view === 'overview' ? 'Обзор' : title}</span></div>${brand('mobile-brand')}<div class="topbar-right"><span>${today()}</span><button class="icon-button" data-action="refresh" aria-label="Обновить данные" title="Обновить" ${state.busy ? 'disabled' : ''}>${icon('refresh')}</button><button class="icon-button mobile-logout" data-action="logout" aria-label="Выйти" title="Выйти">${icon('logout')}</button></div></header>
     ${state.demo ? '<div class="demo-banner"><span>Деморежим · пример данных, изменения не сохраняются на сервере</span><button data-action="logout">К входу →</button></div>' : ''}
-    <div class="page-heading"><div><h1>${title}</h1><p>${subtitle}</p></div><div class="heading-actions"><button class="button ghost" data-action="transfer" ${state.busy ? 'disabled' : ''}>${icon('transfer')} Перевод</button><button class="button primary" data-action="operation" ${state.busy ? 'disabled' : ''}>${icon('plus')} Добавить операцию</button></div></div>
+    <div class="page-heading ${state.view === 'overview' ? 'overview-actions' : ''}">${state.view === 'overview' ? '' : `<div><h1>${title}</h1><p>${subtitle}</p></div>`}<div class="heading-actions"><button class="button ghost" data-action="transfer" ${state.busy ? 'disabled' : ''}>${icon('transfer')} Перевод</button><button class="button primary" data-action="operation" ${state.busy ? 'disabled' : ''}>${icon('plus')} Добавить операцию</button></div></div>
     ${state.error ? `<div class="notice" role="alert">${esc(state.error)} <button class="text-button" data-action="refresh">Повторить</button></div>` : ''}
     ${state.view === 'overview' ? overviewHTML() : ''}
     ${state.view !== 'history' ? accountsHTML() : ''}
     ${state.view !== 'accounts' ? historyHTML() : ''}
-    <footer class="page-footer"><span>Тихо. Финансы в вашем ритме.</span><span>${state.busy ? 'Обновляем данные…' : state.error ? 'Не удалось обновить' : 'Все суммы в рублях'}</span></footer></main></div>`;
+    <footer class="page-footer"><span>Личные финансы / Без лишнего</span><span>${state.busy ? 'Обновляем данные…' : state.error ? 'Не удалось обновить' : 'Все суммы в рублях'}</span></footer></main></div>`;
+  enhanceSelects(app);
 }
 function overviewHTML() {
   const total = state.accounts.reduce((sum, a) => sum + a.balance, 0);
@@ -154,11 +158,14 @@ async function refresh() {
   }
 }
 function showDialog(title, content) {
+  closeSelect();
   dialogTrigger = document.activeElement;
   dialog.innerHTML = `<div class="dialog-head"><h2 id="dialog-title">${title}</h2><button class="icon-button" data-close aria-label="Закрыть">${icon('close')}</button></div>${content}`;
   dialog.showModal();
+  enhanceSelects(dialog);
 }
 function closeDialog() {
+  closeSelect();
   if (dialog.open) dialog.close();
   dialogTrigger?.isConnected && dialogTrigger.focus();
 }
@@ -193,8 +200,13 @@ function openOperation(type = 'expense') {
   let currentType = type;
   const options = state.accounts.map(a => `<option value="${a.id}">${esc(a.name)} · ${money(a.balance)}</option>`).join('');
   showDialog('Новая операция', `<form class="form"><div class="segmented" role="group" aria-label="Вид операции">${Object.entries(operationTypes).map(([value, label]) => `<button type="button" data-operation="${value}">${label}</button>`).join('')}</div><label class="field">Сумма, ₽<input name="amount" inputmode="decimal" placeholder="0,00" required autofocus></label><label class="field" id="source-field">Списать со счёта<select name="from">${options}</select></label><label class="field" id="destination-field">Зачислить на счёт<select name="to">${options}</select></label><label class="field">Дата и время<input name="date" type="datetime-local" value="${localDateTime()}" required></label><label class="field">Описание <span class="muted">Необязательно</span><input name="description" maxlength="500" placeholder="На что потратили или откуда поступили деньги"></label><p class="form-summary" id="operation-hint"></p><p class="form-error" role="alert"></p><button class="button primary" type="submit">Сохранить операцию</button></form>`);
-  if (state.accounts.length > 1) dialog.querySelector('[name=to]').value = String(state.accounts[1].id);
+  if (state.accounts.length > 1) {
+    const destination = dialog.querySelector('[name=to]');
+    destination.value = String(state.accounts[1].id);
+    destination.dispatchEvent(new Event('change', { bubbles: true }));
+  }
   function selectType(value) {
+    closeSelect();
     currentType = value;
     dialog.querySelectorAll('[data-operation]').forEach(b => { b.classList.toggle('active', b.dataset.operation === value); b.setAttribute('aria-pressed', String(b.dataset.operation === value)); });
     dialog.querySelector('#source-field').hidden = value === 'income';
@@ -242,7 +254,10 @@ function startDemo() {
   refresh();
 }
 app.addEventListener('change', event => {
-  if (event.target.id === 'account-filter') { state.account = event.target.value; state.page = 0; refresh(); }
+  if (event.target.id === 'account-filter') {
+    state.account = event.target.value; state.page = 0;
+    refresh().then(() => app.querySelector('#account-filter + .custom-select .select-trigger')?.focus({ preventScroll: true }));
+  }
 });
 app.addEventListener('click', async event => {
   const b = event.target.closest('button, a.brand');
@@ -272,7 +287,7 @@ app.addEventListener('click', async event => {
   }
 });
 dialog.addEventListener('click', event => { if (event.target.closest('[data-close]') && !dialog.querySelector('[data-saving]')) closeDialog(); });
-dialog.addEventListener('cancel', event => { if (dialog.querySelector('[data-saving]')) event.preventDefault(); });
+dialog.addEventListener('cancel', event => { if (dialog.querySelector('[data-saving]')) event.preventDefault(); else closeSelect(); });
 async function boot() {
   try { state.user = await api('/me'); await refresh(); }
   catch (error) { renderAuth(error.status === 401 ? '' : error.message); }
