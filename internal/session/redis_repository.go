@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"encoding/json/v2"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -79,7 +80,7 @@ func (r *RedisRepository) Extend(ctx context.Context, hash string, expiresAt tim
 			return fmt.Errorf("failed to convert json into session: %w", err)
 		}
 
-		if session.ExpiresAt.Before(time.Now()) {
+		if !session.ExpiresAt.After(time.Now()) {
 			return ErrSessionExpired
 		}
 
@@ -103,10 +104,15 @@ func (r *RedisRepository) Extend(ctx context.Context, hash string, expiresAt tim
 		updatedSession = &session
 		return nil
 	}
-	err := r.client.Watch(ctx, fn, bld.String())
-	if err != nil {
+	for range 3 {
+		err := r.client.Watch(ctx, fn, bld.String())
+		if err == nil {
+			return updatedSession, nil
+		}
+		if errors.Is(err, redis.TxFailedErr) {
+			continue
+		}
 		return nil, fmt.Errorf("failed to extend session: %w", err)
 	}
-
-	return updatedSession, nil
+	return nil, fmt.Errorf("failed to extend session after 3 attempts: %w", redis.TxFailedErr)
 }

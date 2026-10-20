@@ -32,21 +32,30 @@ func main() {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	dbCtx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 
-	pool, err := database.NewPool(ctx, cnfg.DatabaseURL)
+	pool, err := database.NewPool(dbCtx, cnfg.DatabaseURL)
 	if err != nil {
 		logger.Error("Failed to connect to database", "error", err)
 		return
 	}
 	defer pool.Close()
 
+	rdbCtx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	rdb, err := database.NewRedisClient(rdbCtx, cnfg.RedisAddr)
+	if err != nil {
+		logger.Error("Failed to connect to redis", "error", err)
+		return
+	}
+	defer rdb.Close()
+
 	accRepo := account.NewRepository(pool)
 	accSvc := account.NewService(accRepo)
 	accHand := account.NewHandler(accSvc, logger)
 
-	sessionRepo := session.NewSessionRepo(pool)
+	sessionRepo := session.NewRedisRepository(rdb)
 	sessionSvc, err := session.NewService(sessionRepo, cnfg.SessionIdleTTL, cnfg.SessionAbsoluteTTL)
 	if err != nil {
 		logger.Error("Failed to create session service struct", "error", err)
