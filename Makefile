@@ -1,7 +1,7 @@
 include .env
 export
 
-.PHONY: run db-up db-down db-logs migrate-up migrate-down
+.PHONY: run db-up db-down db-logs migrate-up migrate-down up down
 
 run:
 	@go run cmd/app/main.go
@@ -14,6 +14,12 @@ db-down:
 
 db-logs:
 	@docker compose logs -f db
+
+up:
+	@docker compose up -d
+
+down:
+	@docker compose down
 
 migrate-up:
 	@migrate -path ./migrations -database "$(PG_URL)" -verbose up

@@ -5,19 +5,12 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"time"
 )
 
-var (
-	ErrInvalidIdleTTL     = errors.New("invalid session's idle time to live")
-	ErrInvalidAbsoluteTTL = errors.New("invalid session's absolute time to live")
-	ErrSessionExpired     = errors.New("session expired")
-)
-
 type Service struct {
-	repo        *SessionRepository
+	repo        Repository
 	idleTTL     time.Duration
 	absoluteTTL time.Duration
 }
@@ -25,7 +18,7 @@ type Service struct {
 // NewService sets how long a session may stay idle and how long it may exist in total.
 // The idle timeout must be between five minutes and one hour.
 // The total lifetime must be between five and 24 hours.
-func NewService(repo *SessionRepository, idleTTL, absoluteTTL time.Duration) (*Service, error) {
+func NewService(repo Repository, idleTTL, absoluteTTL time.Duration) (*Service, error) {
 	if idleTTL < time.Minute*5 || idleTTL > time.Hour {
 		return nil, ErrInvalidIdleTTL
 	}

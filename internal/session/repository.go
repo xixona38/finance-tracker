@@ -10,10 +10,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-var (
-	ErrSessionNotFound = errors.New("session not found")
-)
-
 type SessionRepository struct {
 	pool *pgxpool.Pool
 }
@@ -84,7 +80,7 @@ func (s *SessionRepository) Delete(ctx context.Context, hash string) error {
 // Extend moves an active session's expiration time forward and returns the updated session.
 // It keeps the later expiration time if another request has already extended the session.
 // It returns ErrSessionNotFound if the session is missing or has already expired.
-func (s *SessionRepository) Extend(ctx context.Context, tokenHash string, expiresAt time.Time) (*Session, error) {
+func (s *SessionRepository) Extend(ctx context.Context, hash string, expiresAt time.Time) (*Session, error) {
 	query := `
 		UPDATE sessions
 		SET expires_at = GREATEST(expires_at, $1)
@@ -93,7 +89,7 @@ func (s *SessionRepository) Extend(ctx context.Context, tokenHash string, expire
 	`
 
 	var session Session
-	if err := s.pool.QueryRow(ctx, query, expiresAt, tokenHash).Scan(&session.TokenHash, &session.UserID, &session.CreatedAt, &session.ExpiresAt); err != nil {
+	if err := s.pool.QueryRow(ctx, query, expiresAt, hash).Scan(&session.TokenHash, &session.UserID, &session.CreatedAt, &session.ExpiresAt); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrSessionNotFound
 		}

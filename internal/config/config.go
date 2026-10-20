@@ -10,6 +10,7 @@ import (
 // Config holds the database address, HTTP address, session lifetimes, and cookie security setting.
 type Config struct {
 	DatabaseURL        string
+	RedisAddr          string
 	HTTPAddr           string
 	SessionIdleTTL     time.Duration
 	SessionAbsoluteTTL time.Duration
@@ -25,6 +26,12 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("PG_URL is required")
 	}
 	config.DatabaseURL = pgURL
+
+	redisAddr, ok := os.LookupEnv("REDIS_ADDR")
+	if !ok || redisAddr == "" {
+		return Config{}, fmt.Errorf("REDIS_ADDR is required")
+	}
+	config.RedisAddr = redisAddr
 
 	httpAddr, ok := os.LookupEnv("HTTP_ADDR")
 	if !ok || httpAddr == "" {
